@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Claude Workspace Manager</title>
+  <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="project.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="app-title">Workspaces</span>
+      </div>
+      <ul class="project-list" id="project-list"></ul>
+      <div class="sidebar-footer">
+        <button id="btn-new" class="btn-new">+ New Project</button>
+      </div>
+    </aside>
+
+    <!-- Main area -->
+    <div class="main">
+
+      <!-- Config panel -->
+      <section class="config-panel">
+        <div class="config-top">
+          <input id="project-name" class="project-name-input" type="text" placeholder="Project name..." spellcheck="false"/>
+          <div class="config-actions">
+            <button id="btn-context" class="btn btn-ghost">Context</button>
+            <button id="btn-project" class="btn btn-ghost">Project</button>
+            <button id="btn-launch" class="btn btn-primary">Launch Claude</button>
+            <button id="btn-kill" class="btn btn-danger" disabled>Kill</button>
+            <button id="btn-delete" class="btn btn-ghost" title="Delete project">Delete</button>
+          </div>
+        </div>
+
+        <div class="server-bar">
+          <button id="btn-server" class="btn btn-server">Share</button>
+          <span class="server-url" id="server-url"></span>
+          <button class="btn btn-copy" id="btn-copy-url" style="display:none">Copy</button>
+          <span class="server-clients" id="server-clients" style="display:none"></span>
+        </div>
+
+        <div class="workspace-rows">
+          <div class="workspace-row">
+            <span class="ws-label" data-role="frontend">Frontend</span>
+            <span class="ws-path" id="frontend-path">No directory selected</span>
+            <button class="btn btn-browse" id="browse-frontend">Browse</button>
+            <span class="status-dot" id="dot-frontend"></span>
+          </div>
+          <div class="workspace-row">
+            <span class="ws-label" data-role="backend">Backend</span>
+            <span class="ws-path" id="backend-path">No directory selected</span>
+            <button class="btn btn-browse" id="browse-backend">Browse</button>
+            <span class="status-dot" id="dot-backend"></span>
+          </div>
+        </div>
+
+        <!-- Session prompt -->
+        <div class="session-prompt-section">
+          <button class="sp-toggle" id="sp-toggle">
+            <span class="sp-arrow" id="sp-arrow">▶</span>
+            Session Prompts
+            <span class="sp-status" id="sp-status"></span>
+          </button>
+          <div class="sp-body" id="sp-body" style="display:none">
+            <span class="sp-hint">Typed into each terminal 5s after Claude starts.</span>
+            <div class="sp-field">
+              <label class="sp-field-label fe">Frontend</label>
+              <textarea id="sp-frontend" class="sp-textarea" placeholder="Prompt for the Frontend Claude..." rows="2" spellcheck="false"></textarea>
+            </div>
+            <div class="sp-field">
+              <label class="sp-field-label be">Backend</label>
+              <textarea id="sp-backend" class="sp-textarea" placeholder="Prompt for the Backend Claude..." rows="2" spellcheck="false"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Project view (replaces terminals when active) -->
+      <section class="project-view" id="project-view" style="display:none"></section>
+
+      <!-- Terminal panes -->
+      <section class="terminals-section">
+        <div class="terminal-pane" id="pane-frontend">
+          <div class="terminal-header">
+            <span class="terminal-label" data-role="frontend">Frontend</span>
+            <span class="terminal-cwd" id="cwd-frontend"></span>
+            <span class="terminal-status" id="status-frontend">idle</span>
+          </div>
+          <div class="terminal-body" id="term-frontend"></div>
+        </div>
+        <div class="pane-divider"></div>
+        <div class="terminal-pane" id="pane-backend">
+          <div class="terminal-header">
+            <span class="terminal-label" data-role="backend">Backend</span>
+            <span class="terminal-cwd" id="cwd-backend"></span>
+            <span class="terminal-status" id="status-backend">idle</span>
+          </div>
+          <div class="terminal-body" id="term-backend"></div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Context drawer -->
+    <div class="context-drawer" id="context-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title">Project Context</span>
+        <span class="drawer-hint">Available via MCP</span>
+        <button class="drawer-close" id="btn-close-context">✕</button>
+      </div>
+
+      <!-- Add tabs: Text / File / URL -->
+      <div class="ctx-add-tabs">
+        <button class="ctx-tab active" data-tab="text">Text</button>
+        <button class="ctx-tab" data-tab="file">File</button>
+        <button class="ctx-tab" data-tab="url">URL</button>
+      </div>
+
+      <!-- Text entry form -->
+      <div class="drawer-add" id="tab-text">
+        <input  id="ctx-title"   class="ctx-input"    type="text"  placeholder="Title..."   spellcheck="false"/>
+        <select id="ctx-type"    class="ctx-select">
+          <option value="note">Note</option>
+          <option value="spec">Spec</option>
+          <option value="doc">Doc</option>
+          <option value="code">Code</option>
+          <option value="decision">Decision</option>
+          <option value="other">Other</option>
+        </select>
+        <textarea id="ctx-content" class="ctx-textarea" placeholder="Content..." rows="4" spellcheck="false"></textarea>
+        <div class="ctx-form-actions">
+          <button id="btn-ctx-save" class="btn btn-primary btn-sm">Add Entry</button>
+          <button id="btn-ctx-cancel" class="btn btn-ghost btn-sm" style="display:none">Cancel</button>
+        </div>
+      </div>
+
+      <!-- File entry form -->
+      <div class="drawer-add" id="tab-file" style="display:none">
+        <p class="ctx-tab-desc">Add files whose content Claude can read live via <code>get_context</code>.</p>
+        <button id="btn-add-files" class="btn btn-primary btn-sm">Browse Files...</button>
+      </div>
+
+      <!-- URL entry form -->
+      <div class="drawer-add" id="tab-url" style="display:none">
+        <p class="ctx-tab-desc">Add URLs Claude can fetch via <code>fetch_url_context</code>.</p>
+        <input  id="ctx-url-title" class="ctx-input" type="text"  placeholder="Title (optional)" spellcheck="false"/>
+        <input  id="ctx-url-value" class="ctx-input" type="url"   placeholder="https://..." spellcheck="false"/>
+        <button id="btn-add-url" class="btn btn-primary btn-sm">Add URL</button>
+      </div>
+
+      <div class="context-list" id="context-list"></div>
+    </div>
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+
+  </div>
+
+  <script src="../node_modules/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="project.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

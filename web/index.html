@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Workspace — Remote</title>
+  <link rel="stylesheet" href="/xterm/css/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+
+    <header class="topbar">
+      <span class="brand">Claude Workspace</span>
+      <button class="ctx-toggle" id="ctx-toggle">Context</button>
+      <span class="conn-status" id="conn-status">Connecting...</span>
+    </header>
+
+    <div class="body">
+
+      <div class="terminals">
+        <div class="pane" id="pane-frontend">
+          <div class="pane-header">
+            <span class="pane-label fe">Frontend</span>
+            <span class="pane-status" id="status-frontend">idle</span>
+          </div>
+          <div class="term-wrap" id="term-frontend"></div>
+        </div>
+        <div class="divider" id="divider"></div>
+        <div class="pane" id="pane-backend">
+          <div class="pane-header">
+            <span class="pane-label be">Backend</span>
+            <span class="pane-status" id="status-backend">idle</span>
+          </div>
+          <div class="term-wrap" id="term-backend"></div>
+        </div>
+      </div>
+
+      <!-- Context panel -->
+      <aside class="ctx-panel" id="ctx-panel">
+        <div class="ctx-panel-header">
+          <span class="ctx-panel-title">Project Context</span>
+          <button class="ctx-panel-close" id="ctx-panel-close">✕</button>
+        </div>
+
+        <div class="ctx-add-form">
+          <input  id="web-ctx-title"   class="ctx-field" type="text" placeholder="Title..." spellcheck="false"/>
+          <select id="web-ctx-type"    class="ctx-field ctx-select">
+            <option value="note">Note</option>
+            <option value="spec">Spec</option>
+            <option value="doc">Doc</option>
+            <option value="code">Code</option>
+            <option value="decision">Decision</option>
+            <option value="other">Other</option>
+          </select>
+          <textarea id="web-ctx-content" class="ctx-field ctx-area" placeholder="Content..." rows="3" spellcheck="false"></textarea>
+          <button id="web-ctx-save" class="ctx-save-btn">Add Entry</button>
+        </div>
+
+        <div class="ctx-entries" id="ctx-entries">
+          <div class="ctx-empty">No context entries yet.</div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+  <script src="/xterm/lib/xterm.js"></script>
+  <script src="/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
