@@ -4,6 +4,19 @@
 
 const PANE_COLORS = ['#5b8def', '#7c5bef', '#27ae60', '#d4a017'];
 
+const DEFAULT_APP_PROMPT = `You are running inside Claude Workspace Manager. An MCP server called 'workspace-context' is connected and gives you tools to read and write shared project context that persists between sessions.
+
+At the start of this session, run list_context to review existing notes, decisions, and specs for this project.
+
+As you work, actively use the MCP tools to keep project records up to date:
+- add_context / update_context — log decisions (type: decision), architecture notes (type: spec), task findings (type: note), and code snippets (type: code)
+- get_context — read any entry in full; file-type entries return live file contents
+- fetch_url_context — pull in documentation or reference URLs
+- search_context — search before adding to avoid duplicates
+- delete_context — clean up outdated entries
+
+Log every significant decision, architecture choice, or design rationale using these tools so future sessions have full context. Do not wait until the end — log as you go.`;
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 let projects = [];
@@ -41,6 +54,12 @@ const elSpToggle      = document.getElementById('sp-toggle');
 const elSpArrow       = document.getElementById('sp-arrow');
 const elSpBody        = document.getElementById('sp-body');
 const elSpStatus      = document.getElementById('sp-status');
+// App Prompt
+const elApToggle      = document.getElementById('ap-toggle');
+const elApArrow       = document.getElementById('ap-arrow');
+const elApBody        = document.getElementById('ap-body');
+const elApStatus      = document.getElementById('ap-status');
+const elAppPrompt     = document.getElementById('app-prompt-textarea');
 
 let editingEntryId = null;
 let projectViewOpen = false;
@@ -74,11 +93,27 @@ function newPaneId() {
 async function init() {
   projects = await window.api.loadProjects();
   projects.forEach(migrateProject);
+  await loadAppPrompt();
   setupIPC();
   bindUI();
   renderProjectList();
   if (projects.length > 0) selectProject(projects[0].id);
   else createProject();
+}
+
+async function loadAppPrompt() {
+  const settings = await window.api.loadSettings();
+  if (settings.appPrompt !== undefined) {
+    elAppPrompt.value = settings.appPrompt;
+  } else {
+    elAppPrompt.value = DEFAULT_APP_PROMPT;
+    await window.api.saveSettings({ appPrompt: DEFAULT_APP_PROMPT });
+  }
+  updateApStatus();
+}
+
+function updateApStatus() {
+  elApStatus.textContent = elAppPrompt.value.trim() ? '● on' : '';
 }
 
 // ─── Terminal Management ──────────────────────────────────────────────────────
@@ -231,6 +266,16 @@ function bindUI() {
     navigator.clipboard.writeText(elServerUrl.textContent);
     elBtnCopyUrl.textContent = 'Copied!';
     setTimeout(() => { elBtnCopyUrl.textContent = 'Copy'; }, 1500);
+  });
+
+  elApToggle.addEventListener('click', () => {
+    const open = elApBody.style.display === 'none';
+    elApBody.style.display = open ? '' : 'none';
+    elApArrow.classList.toggle('open', open);
+  });
+  elAppPrompt.addEventListener('input', async () => {
+    await window.api.saveSettings({ appPrompt: elAppPrompt.value });
+    updateApStatus();
   });
 
   elSpToggle.addEventListener('click', () => {

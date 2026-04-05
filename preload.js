@@ -37,4 +37,8 @@ contextBridge.exposeInMainWorld('api', {
   // Project data
   loadProjectData:    (pid)               => ipcRenderer.invoke('project:load', pid),
   saveProjectSection: (pid, section, items) => ipcRenderer.invoke('project:save-section', { pid, section, items }),
+
+  // Settings
+  loadSettings: ()         => ipcRenderer.invoke('settings:load'),
+  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
 });

@@ -13,6 +13,7 @@ const WS_PORT = 3141;
 const MCP_SERVER = path.join(__dirname, 'mcp', 'server.js');
 
 let configPath;
+let settingsPath;
 let mainWindow;
 const terminals = {};
 
@@ -46,9 +47,23 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  configPath = path.join(app.getPath('userData'), 'projects.json');
+  configPath  = path.join(app.getPath('userData'), 'projects.json');
+  settingsPath = path.join(app.getPath('userData'), 'settings.json');
   createWindow();
 });
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(settingsPath)) return JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (_) {}
+  return {};
+}
+
+function saveSettings(settings) {
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+}
 
 app.on('window-all-closed', () => {
   Object.values(terminals).forEach(t => { try { t.kill(); } catch (_) {} });
@@ -235,6 +250,9 @@ function handleWebContextDelete(ws, { projectId, id }) {
 
 // ─── IPC: Server ─────────────────────────────────────────────────────────────
 
+ipcMain.handle('settings:load', () => loadSettings());
+ipcMain.handle('settings:save', (event, settings) => { saveSettings(settings); return true; });
+
 ipcMain.handle('server:start', () => { startWebServer(); return WS_PORT; });
 ipcMain.handle('server:stop',  () => { stopWebServer(); });
 ipcMain.handle('server:set-panes', (event, panes) => {
@@ -291,6 +309,8 @@ ipcMain.handle('pty:spawn', (event, { id, cwd, projectId, sessionPrompt }) => {
     broadcastWS({ type: 'exit', id, exitCode });
   });
 
+  const appPrompt = (loadSettings().appPrompt || '').trim();
+
   setTimeout(() => {
     if (!terminals[id]) return;
     if (projectId) {
@@ -302,10 +322,12 @@ ipcMain.handle('pty:spawn', (event, { id, cwd, projectId, sessionPrompt }) => {
     } else {
       ptyProcess.write('claude\r');
     }
-    // Send session prompt after Claude finishes starting up
-    if (sessionPrompt && sessionPrompt.trim()) {
+    // Combine app-level prompt + per-pane session prompt, send after Claude loads
+    const combined = [appPrompt, sessionPrompt && sessionPrompt.trim() ? sessionPrompt.trim() : '']
+      .filter(Boolean).join('\n\n');
+    if (combined) {
       setTimeout(() => {
-        if (terminals[id]) ptyProcess.write(sessionPrompt.trim() + '\r');
+        if (terminals[id]) ptyProcess.write(combined + '\r');
       }, 5000);
     }
   }, 600);

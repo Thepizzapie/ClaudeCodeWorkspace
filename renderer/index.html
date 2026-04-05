@@ -45,6 +45,19 @@
           <span class="server-clients" id="server-clients" style="display:none"></span>
         </div>
 
+        <!-- App Prompt -->
+        <div class="app-prompt-section">
+          <button class="sp-toggle" id="ap-toggle">
+            <span class="sp-arrow" id="ap-arrow">▶</span>
+            App Prompt
+            <span class="sp-status" id="ap-status"></span>
+          </button>
+          <div class="sp-body" id="ap-body" style="display:none">
+            <span class="sp-hint">Sent to every Claude session before per-pane prompts. Edit to customize.</span>
+            <textarea id="app-prompt-textarea" class="sp-textarea" rows="5" spellcheck="false"></textarea>
+          </div>
+        </div>
+
         <!-- Workspace rows -->
         <div class="workspace-area">
           <div class="workspace-area-header">

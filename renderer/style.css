@@ -480,6 +480,13 @@ html, body {
   white-space: nowrap;
 }
 
+/* ---- App Prompt ---- */
+.app-prompt-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
 /* ---- Session Prompt ---- */
 .session-prompt-section {
   margin-top: 8px;
