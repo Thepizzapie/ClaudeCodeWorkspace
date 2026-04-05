@@ -2,7 +2,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PANE_COLORS = ['#5b8def', '#7c5bef', '#27ae60', '#d4a017'];
+const PANE_COLORS = ['#9cff93', '#15a4ff', '#ffc965', '#ff6b9d'];
 
 const DEFAULT_APP_PROMPT = `You are running inside Claude Workspace Manager. An MCP server called 'workspace-context' is connected and gives you tools to read and write shared project context that persists between sessions.
 
@@ -156,16 +156,16 @@ function setupTerminals(panes) {
     if (!container) return;
     const term = new Terminal({
       theme: {
-        background: '#0a0a0a', foreground: '#d8d8d8', cursor: '#5b8def',
-        cursorAccent: '#0a0a0a', selectionBackground: '#2a3a5a',
-        black: '#1a1a1a', brightBlack: '#444',
-        red: '#c0392b', brightRed: '#e74c3c',
-        green: '#27ae60', brightGreen: '#2ecc71',
-        yellow: '#d4a017', brightYellow: '#f39c12',
-        blue: '#5b8def', brightBlue: '#74a7ff',
-        magenta: '#7c5bef', brightMagenta: '#9b77ff',
-        cyan: '#1abc9c', brightCyan: '#1dd2af',
-        white: '#d8d8d8', brightWhite: '#ffffff',
+        background: '#080808', foreground: '#e0e0e0', cursor: '#9cff93',
+        cursorAccent: '#080808', selectionBackground: '#1a3a1a',
+        black: '#141414', brightBlack: '#484847',
+        red: '#ff4d4d', brightRed: '#ff6b6b',
+        green: '#9cff93', brightGreen: '#00fc40',
+        yellow: '#ffc965', brightYellow: '#ffd98a',
+        blue: '#15a4ff', brightBlue: '#5bc0ff',
+        magenta: '#ff6b9d', brightMagenta: '#ff8fb5',
+        cyan: '#00d4ff', brightCyan: '#33dcff',
+        white: '#e0e0e0', brightWhite: '#ffffff',
       },
       fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
       fontSize: 13, lineHeight: 1.25, cursorBlink: true,
