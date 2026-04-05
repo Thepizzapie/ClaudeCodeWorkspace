@@ -18,22 +18,8 @@
 
     <div class="body">
 
-      <div class="terminals">
-        <div class="pane" id="pane-frontend">
-          <div class="pane-header">
-            <span class="pane-label fe">Frontend</span>
-            <span class="pane-status" id="status-frontend">idle</span>
-          </div>
-          <div class="term-wrap" id="term-frontend"></div>
-        </div>
-        <div class="divider" id="divider"></div>
-        <div class="pane" id="pane-backend">
-          <div class="pane-header">
-            <span class="pane-label be">Backend</span>
-            <span class="pane-status" id="status-backend">idle</span>
-          </div>
-          <div class="term-wrap" id="term-backend"></div>
-        </div>
+      <div class="terminals panes-2" id="terminals-container">
+        <div class="no-panes-msg">Waiting for a session to launch...</div>
       </div>
 
       <!-- Context panel -->

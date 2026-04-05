@@ -1,6 +1,10 @@
 'use strict';
 
-// ─── State ───────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PANE_COLORS = ['#5b8def', '#7c5bef', '#27ae60', '#d4a017'];
+
+// ─── State ────────────────────────────────────────────────────────────────────
 
 let projects = [];
 let currentId = null;
@@ -8,7 +12,6 @@ let running = false;
 let serverRunning = false;
 let contextEntries = [];
 
-const PANES = ['frontend', 'backend'];
 const terms = {};
 const fitAddons = {};
 
@@ -34,23 +37,43 @@ const elCtxType       = document.getElementById('ctx-type');
 const elCtxContent    = document.getElementById('ctx-content');
 const elBtnCtxSave    = document.getElementById('btn-ctx-save');
 const elBtnCtxCancel  = document.getElementById('btn-ctx-cancel');
-// Session prompt
 const elSpToggle      = document.getElementById('sp-toggle');
 const elSpArrow       = document.getElementById('sp-arrow');
 const elSpBody        = document.getElementById('sp-body');
-const elSpFrontend    = document.getElementById('sp-frontend');
-const elSpBackend     = document.getElementById('sp-backend');
 const elSpStatus      = document.getElementById('sp-status');
 
 let editingEntryId = null;
+let projectViewOpen = false;
 
 function el(id) { return document.getElementById(id); }
+
+// ─── Migration ────────────────────────────────────────────────────────────────
+
+function migrateProject(p) {
+  if (p.panes) return p;
+  p.panes = [
+    { id: 'p0', name: 'Frontend', path: p.frontend || '' },
+    { id: 'p1', name: 'Backend',  path: p.backend  || '' },
+  ];
+  p.sessionPrompts = {
+    p0: (p.sessionPrompt && p.sessionPrompt.frontend) || '',
+    p1: (p.sessionPrompt && p.sessionPrompt.backend)  || '',
+  };
+  delete p.frontend;
+  delete p.backend;
+  delete p.sessionPrompt;
+  return p;
+}
+
+function newPaneId() {
+  return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
   projects = await window.api.loadProjects();
-  setupTerminals();
+  projects.forEach(migrateProject);
   setupIPC();
   bindUI();
   renderProjectList();
@@ -58,11 +81,44 @@ async function init() {
   else createProject();
 }
 
-// ─── Terminals ────────────────────────────────────────────────────────────────
+// ─── Terminal Management ──────────────────────────────────────────────────────
 
-function setupTerminals() {
-  PANES.forEach(id => {
-    const container = el(`term-${id}`);
+function teardownTerminals() {
+  Object.keys(terms).forEach(id => {
+    try { terms[id].dispose(); } catch (_) {}
+    delete terms[id];
+    delete fitAddons[id];
+  });
+}
+
+function renderTerminalPanes(panes) {
+  const section = el('terminals-section');
+  section.innerHTML = '';
+  section.className = `terminals-section panes-${panes.length}`;
+
+  panes.forEach((pane, index) => {
+    const color = PANE_COLORS[index % PANE_COLORS.length];
+    const div = document.createElement('div');
+    div.className = 'terminal-pane';
+    div.id = `pane-${pane.id}`;
+    div.innerHTML = `
+      <div class="terminal-header">
+        <span class="terminal-label" style="color:${color}">${escHtml(pane.name)}</span>
+        <span class="terminal-cwd" id="cwd-${pane.id}"></span>
+        <span class="terminal-status" id="status-${pane.id}">idle</span>
+      </div>
+      <div class="terminal-body" id="term-${pane.id}"></div>
+    `;
+    section.appendChild(div);
+  });
+
+  setupTerminals(panes);
+}
+
+function setupTerminals(panes) {
+  panes.forEach(pane => {
+    const container = el(`term-${pane.id}`);
+    if (!container) return;
     const term = new Terminal({
       theme: {
         background: '#0a0a0a', foreground: '#d8d8d8', cursor: '#5b8def',
@@ -83,22 +139,26 @@ function setupTerminals() {
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(container);
-    fitAddon.fit();
-    term.onData(data => { if (running) window.api.writeTerminal(id, data); });
-    terms[id] = term;
-    fitAddons[id] = fitAddon;
+    try { fitAddon.fit(); } catch (_) {}
+    term.onData(data => { if (running) window.api.writeTerminal(pane.id, data); });
+    terms[pane.id] = term;
+    fitAddons[pane.id] = fitAddon;
     new ResizeObserver(() => {
-      fitAddon.fit();
-      window.api.resizeTerminal(id, term.cols, term.rows);
+      if (!container.offsetParent) return;
+      try { fitAddon.fit(); } catch (_) {}
+      window.api.resizeTerminal(pane.id, term.cols, term.rows);
     }).observe(container);
   });
 }
+
+// ─── IPC Setup ────────────────────────────────────────────────────────────────
 
 function setupIPC() {
   window.api.onTerminalData(({ id, data }) => { if (terms[id]) terms[id].write(data); });
   window.api.onTerminalExit(({ id }) => {
     setTermStatus(id, 'exited');
-    el(`dot-${id}`).className = 'status-dot exited';
+    const dot = el(`dot-${id}`);
+    if (dot) dot.className = 'status-dot exited';
     checkAllExited();
   });
 
@@ -129,9 +189,11 @@ function setupIPC() {
 }
 
 function checkAllExited() {
-  const allDone = PANES.every(id => {
-    const s = el(`status-${id}`);
-    return s && (s.textContent === 'exited' || s.textContent === 'idle');
+  const p = getProject(currentId);
+  if (!p) return;
+  const allDone = p.panes.every(pane => {
+    const s = el(`status-${pane.id}`);
+    return !s || s.textContent === 'exited' || s.textContent === 'idle';
   });
   if (allDone) { running = false; elBtnLaunch.disabled = false; elBtnKill.disabled = true; }
 }
@@ -152,19 +214,15 @@ function bindUI() {
     saveProjects();
   });
 
-  PANES.forEach(role => {
-    el(`browse-${role}`).addEventListener('click', async () => {
-      const dir = await window.api.openFolder();
-      if (!dir) return;
-      const p = getProject(currentId);
-      if (!p) return;
-      p[role] = dir;
-      updatePathDisplay(role, dir);
-      saveProjects();
-    });
+  el('btn-add-pane').addEventListener('click', () => {
+    const p = getProject(currentId);
+    if (!p || p.panes.length >= 4) return;
+    p.panes.push({ id: newPaneId(), name: 'New Pane', path: '' });
+    if (!p.sessionPrompts) p.sessionPrompts = {};
+    saveProjects();
+    reloadPaneUI(p);
   });
 
-  // Server
   elBtnServer.addEventListener('click', async () => {
     if (!serverRunning) await window.api.startServer();
     else await window.api.stopServer();
@@ -175,27 +233,19 @@ function bindUI() {
     setTimeout(() => { elBtnCopyUrl.textContent = 'Copy'; }, 1500);
   });
 
-  // Session prompt toggle
   elSpToggle.addEventListener('click', () => {
     const open = elSpBody.style.display === 'none';
     elSpBody.style.display = open ? '' : 'none';
     elSpArrow.classList.toggle('open', open);
   });
 
-  // Session prompt auto-save on change
-  elSpFrontend.addEventListener('input', saveSessionPrompt);
-  elSpBackend.addEventListener('input', saveSessionPrompt);
-
-  // Project view toggle
   elBtnProject.addEventListener('click', toggleProjectView);
 
-  // Context drawer
   elBtnContext.addEventListener('click', openDrawer);
   elBtnCtxCancel.addEventListener('click', cancelEdit);
   elBackdrop.addEventListener('click', closeDrawer);
   el('btn-close-context').addEventListener('click', closeDrawer);
 
-  // Context add tabs
   document.querySelectorAll('.ctx-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.ctx-tab').forEach(t => t.classList.remove('active'));
@@ -205,7 +255,6 @@ function bindUI() {
     });
   });
 
-  // Text context save
   elBtnCtxSave.addEventListener('click', async () => {
     const title   = elCtxTitle.value.trim();
     const content = elCtxContent.value.trim();
@@ -223,7 +272,6 @@ function bindUI() {
     renderContextList();
   });
 
-  // File context
   el('btn-add-files').addEventListener('click', async () => {
     const files = await window.api.openFiles();
     if (!files.length) return;
@@ -231,7 +279,6 @@ function bindUI() {
     renderContextList();
   });
 
-  // URL context
   el('btn-add-url').addEventListener('click', async () => {
     const url   = el('ctx-url-value').value.trim();
     const title = el('ctx-url-title').value.trim();
@@ -246,60 +293,142 @@ function bindUI() {
   });
 }
 
-// ─── Session Prompt ───────────────────────────────────────────────────────────
+// ─── Pane UI ──────────────────────────────────────────────────────────────────
+
+function reloadPaneUI(p) {
+  teardownTerminals();
+  renderWorkspaceRows(p);
+  renderSessionPrompts(p);
+  renderTerminalPanes(p.panes);
+}
+
+function renderWorkspaceRows(p) {
+  const container = el('workspace-rows-container');
+  container.innerHTML = '';
+
+  p.panes.forEach((pane, index) => {
+    const color = PANE_COLORS[index % PANE_COLORS.length];
+    const row = document.createElement('div');
+    row.className = 'workspace-row';
+    row.innerHTML = `
+      <input class="ws-name-input" type="text" value="${escHtml(pane.name)}" spellcheck="false" style="color:${color}" data-pane-id="${pane.id}" title="Rename pane"/>
+      <span class="ws-path${pane.path ? ' has-path' : ''}" id="ws-path-${pane.id}">${pane.path ? escHtml(pane.path) : 'No directory selected'}</span>
+      <button class="btn btn-browse" data-pane-id="${pane.id}">Browse</button>
+      <span class="status-dot" id="dot-${pane.id}"></span>
+      <button class="btn-remove-pane" data-pane-id="${pane.id}"${p.panes.length <= 1 ? ' disabled' : ''} title="Remove pane">×</button>
+    `;
+    container.appendChild(row);
+  });
+
+  container.querySelectorAll('.ws-name-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const p2 = getProject(currentId);
+      if (!p2) return;
+      const pane = p2.panes.find(pn => pn.id === input.dataset.paneId);
+      if (!pane) return;
+      pane.name = input.value || 'Pane';
+      const label = el(`pane-${pane.id}`)?.querySelector('.terminal-label');
+      if (label) label.textContent = pane.name;
+      const spLabel = el('session-prompts-container')?.querySelector(`[data-pane-label="${pane.id}"]`);
+      if (spLabel) spLabel.textContent = pane.name;
+      saveProjects();
+    });
+  });
+
+  container.querySelectorAll('.btn-browse').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const dir = await window.api.openFolder();
+      if (!dir) return;
+      const p2 = getProject(currentId);
+      if (!p2) return;
+      const pane = p2.panes.find(pn => pn.id === btn.dataset.paneId);
+      if (!pane) return;
+      pane.path = dir;
+      const pathEl = el(`ws-path-${pane.id}`);
+      if (pathEl) { pathEl.textContent = dir; pathEl.classList.add('has-path'); }
+      const cwdEl = el(`cwd-${pane.id}`);
+      if (cwdEl) cwdEl.textContent = dir;
+      saveProjects();
+    });
+  });
+
+  container.querySelectorAll('.btn-remove-pane').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (running) return;
+      const p2 = getProject(currentId);
+      if (!p2 || p2.panes.length <= 1) return;
+      const paneId = btn.dataset.paneId;
+      p2.panes = p2.panes.filter(pn => pn.id !== paneId);
+      if (p2.sessionPrompts) delete p2.sessionPrompts[paneId];
+      saveProjects();
+      reloadPaneUI(p2);
+    });
+  });
+
+  el('btn-add-pane').disabled = p.panes.length >= 4;
+}
+
+function renderSessionPrompts(p) {
+  const container = el('session-prompts-container');
+  container.innerHTML = '';
+
+  p.panes.forEach((pane, index) => {
+    const color = PANE_COLORS[index % PANE_COLORS.length];
+    const prompt = (p.sessionPrompts && p.sessionPrompts[pane.id]) || '';
+    const field = document.createElement('div');
+    field.className = 'sp-field';
+    field.innerHTML = `
+      <label class="sp-field-label" data-pane-label="${pane.id}" style="color:${color}">${escHtml(pane.name)}</label>
+      <textarea class="sp-textarea" id="sp-${pane.id}" placeholder="Prompt for ${escHtml(pane.name)}..." rows="2" spellcheck="false">${escHtml(prompt)}</textarea>
+    `;
+    container.appendChild(field);
+  });
+
+  container.querySelectorAll('.sp-textarea').forEach(ta => {
+    ta.addEventListener('input', saveSessionPrompt);
+  });
+
+  updateSpStatus(p);
+}
+
+// ─── Session Prompts ──────────────────────────────────────────────────────────
 
 function saveSessionPrompt() {
   const p = getProject(currentId);
   if (!p) return;
-  p.sessionPrompt = {
-    frontend: elSpFrontend.value,
-    backend:  elSpBackend.value,
-  };
-  updateSpStatus(p.sessionPrompt);
+  if (!p.sessionPrompts) p.sessionPrompts = {};
+  p.panes.forEach(pane => {
+    const ta = el(`sp-${pane.id}`);
+    if (ta) p.sessionPrompts[pane.id] = ta.value;
+  });
+  updateSpStatus(p);
   saveProjects();
 }
 
-function loadSessionPrompt(p) {
-  const sp = p.sessionPrompt || {};
-  elSpFrontend.value = sp.frontend || '';
-  elSpBackend.value  = sp.backend  || '';
-  updateSpStatus(sp);
+function updateSpStatus(p) {
+  const prompts = p.sessionPrompts || {};
+  const active = p.panes.filter(pane => prompts[pane.id] && prompts[pane.id].trim());
+  if (!active.length)                      elSpStatus.textContent = '';
+  else if (active.length === p.panes.length) elSpStatus.textContent = '→ all';
+  else                                     elSpStatus.textContent = `→ ${active.map(pn => pn.name).join(', ')}`;
 }
-
-function updateSpStatus(sp) {
-  const fe = sp && sp.frontend && sp.frontend.trim();
-  const be = sp && sp.backend  && sp.backend.trim();
-  if (fe && be)  elSpStatus.textContent = '→ both';
-  else if (fe)   elSpStatus.textContent = '→ frontend';
-  else if (be)   elSpStatus.textContent = '→ backend';
-  else           elSpStatus.textContent = '';
-}
-
-function getSessionPromptFor(role, p) {
-  const sp = p.sessionPrompt;
-  if (!sp) return null;
-  const text = sp[role];
-  return text && text.trim() ? text.trim() : null;
-}
-
-// ─── Context Drawer ───────────────────────────────────────────────────────────
 
 // ─── Project View ─────────────────────────────────────────────────────────────
-
-let projectViewOpen = false;
 
 function toggleProjectView() {
   projectViewOpen = !projectViewOpen;
   el('project-view').style.display    = projectViewOpen ? '' : 'none';
-  el('terminals-section') && (document.querySelector('.terminals-section').style.display = projectViewOpen ? 'none' : '');
+  el('terminals-section').style.display = projectViewOpen ? 'none' : '';
   elBtnProject.classList.toggle('active', projectViewOpen);
   elBtnProject.textContent = projectViewOpen ? 'Terminals' : 'Project';
   if (projectViewOpen && currentId) {
     PM.init(currentId);
   } else {
-    PANES.forEach(id => fitAddons[id] && fitAddons[id].fit());
+    Object.values(fitAddons).forEach(fa => { try { fa.fit(); } catch (_) {} });
   }
 }
+
+// ─── Context Drawer ───────────────────────────────────────────────────────────
 
 function openDrawer() {
   elDrawer.classList.add('open');
@@ -384,7 +513,6 @@ function renderContextList() {
         elCtxType.value    = entry.type || 'note';
         elBtnCtxSave.textContent = 'Save Changes';
         elBtnCtxCancel.style.display = '';
-        // Switch to text tab
         document.querySelectorAll('.ctx-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'text'));
         document.querySelectorAll('.drawer-add').forEach(d => d.style.display = 'none');
         el('tab-text').style.display = '';
@@ -412,7 +540,15 @@ function escHtml(str) {
 
 function createProject() {
   const id = `proj-${Date.now()}`;
-  projects.push({ id, name: 'New Project', frontend: '', backend: '' });
+  projects.push({
+    id,
+    name: 'New Project',
+    panes: [
+      { id: newPaneId(), name: 'Frontend', path: '' },
+      { id: newPaneId(), name: 'Backend',  path: '' },
+    ],
+    sessionPrompts: {},
+  });
   renderProjectList();
   saveProjects();
   selectProject(id);
@@ -460,32 +596,14 @@ function renderProjectList() {
 function loadProjectUI() {
   const p = getProject(currentId);
   if (!p) return;
+  migrateProject(p);
   elProjectName.value = p.name || '';
-  updatePathDisplay('frontend', p.frontend);
-  updatePathDisplay('backend',  p.backend);
-  loadSessionPrompt(p);
-  PANES.forEach(id => {
-    setTermStatus(id, 'idle');
-    el(`dot-${id}`).className = 'status-dot';
-    el(`cwd-${id}`).textContent = '';
-  });
-}
-
-function updatePathDisplay(role, dir) {
-  const e = el(`${role}-path`);
-  if (dir) {
-    e.textContent = dir;
-    e.classList.add('has-path');
-    el(`cwd-${role}`).textContent = dir;
-  } else {
-    e.textContent = 'No directory selected';
-    e.classList.remove('has-path');
-    el(`cwd-${role}`).textContent = '';
-  }
+  reloadPaneUI(p);
 }
 
 function setTermStatus(id, status) {
   const s = el(`status-${id}`);
+  if (!s) return;
   s.textContent = status;
   s.className = 'terminal-status ' + status;
 }
@@ -495,29 +613,40 @@ function setTermStatus(id, status) {
 async function launchTerminals() {
   const p = getProject(currentId);
   if (!p) return;
-  if (!p.frontend || !p.backend) {
-    alert('Please set both frontend and backend directories first.');
+  const unset = p.panes.filter(pane => !pane.path);
+  if (unset.length) {
+    alert(`Please set directories for: ${unset.map(pn => pn.name).join(', ')}`);
     return;
   }
 
-  PANES.forEach(id => terms[id].clear());
+  p.panes.forEach(pane => { if (terms[pane.id]) terms[pane.id].clear(); });
   running = true;
   elBtnLaunch.disabled = true;
   elBtnKill.disabled = false;
 
-  for (const role of PANES) {
-    setTermStatus(role, 'running');
-    el(`dot-${role}`).className = 'status-dot running';
-    const prompt = getSessionPromptFor(role, p);
-    await window.api.spawnTerminal(role, p[role], currentId, prompt);
+  if (window.api.setPanesConfig) {
+    window.api.setPanesConfig(p.panes.map((pane, i) => ({
+      id: pane.id, name: pane.name, colorIndex: i,
+    })));
+  }
+
+  for (const pane of p.panes) {
+    setTermStatus(pane.id, 'running');
+    const dot = el(`dot-${pane.id}`);
+    if (dot) dot.className = 'status-dot running';
+    const prompt = p.sessionPrompts && p.sessionPrompts[pane.id];
+    await window.api.spawnTerminal(pane.id, pane.path, currentId, prompt && prompt.trim() ? prompt.trim() : null);
   }
 }
 
 async function killTerminals() {
-  for (const id of PANES) {
-    await window.api.killTerminal(id);
-    setTermStatus(id, 'idle');
-    el(`dot-${id}`).className = 'status-dot';
+  const p = getProject(currentId);
+  if (!p) return;
+  for (const pane of p.panes) {
+    await window.api.killTerminal(pane.id);
+    setTermStatus(pane.id, 'idle');
+    const dot = el(`dot-${pane.id}`);
+    if (dot) dot.className = 'status-dot';
   }
   running = false;
   elBtnLaunch.disabled = false;

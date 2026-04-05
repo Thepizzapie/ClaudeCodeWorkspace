@@ -18,8 +18,9 @@ contextBridge.exposeInMainWorld('api', {
   saveProjects:  (projects) => ipcRenderer.invoke('projects:save', projects),
 
   // Web server
-  startServer: () => ipcRenderer.invoke('server:start'),
-  stopServer:  () => ipcRenderer.invoke('server:stop'),
+  startServer:    () => ipcRenderer.invoke('server:start'),
+  stopServer:     () => ipcRenderer.invoke('server:stop'),
+  setPanesConfig: (panes) => ipcRenderer.invoke('server:set-panes', panes),
   onServerStarted: (cb) => ipcRenderer.on('server:started', (_, p) => cb(p)),
   onServerStopped: (cb) => ipcRenderer.on('server:stopped', (_, p) => cb(p)),
   onServerClients: (cb) => ipcRenderer.on('server:clients', (_, n) => cb(n)),

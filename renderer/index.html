@@ -45,22 +45,16 @@
           <span class="server-clients" id="server-clients" style="display:none"></span>
         </div>
 
-        <div class="workspace-rows">
-          <div class="workspace-row">
-            <span class="ws-label" data-role="frontend">Frontend</span>
-            <span class="ws-path" id="frontend-path">No directory selected</span>
-            <button class="btn btn-browse" id="browse-frontend">Browse</button>
-            <span class="status-dot" id="dot-frontend"></span>
+        <!-- Workspace rows -->
+        <div class="workspace-area">
+          <div class="workspace-area-header">
+            <span class="workspace-area-label">Workspaces</span>
+            <button id="btn-add-pane" class="btn-add-pane">+ Add Pane</button>
           </div>
-          <div class="workspace-row">
-            <span class="ws-label" data-role="backend">Backend</span>
-            <span class="ws-path" id="backend-path">No directory selected</span>
-            <button class="btn btn-browse" id="browse-backend">Browse</button>
-            <span class="status-dot" id="dot-backend"></span>
-          </div>
+          <div id="workspace-rows-container" class="workspace-rows"></div>
         </div>
 
-        <!-- Session prompt -->
+        <!-- Session prompts -->
         <div class="session-prompt-section">
           <button class="sp-toggle" id="sp-toggle">
             <span class="sp-arrow" id="sp-arrow">▶</span>
@@ -69,14 +63,7 @@
           </button>
           <div class="sp-body" id="sp-body" style="display:none">
             <span class="sp-hint">Typed into each terminal 5s after Claude starts.</span>
-            <div class="sp-field">
-              <label class="sp-field-label fe">Frontend</label>
-              <textarea id="sp-frontend" class="sp-textarea" placeholder="Prompt for the Frontend Claude..." rows="2" spellcheck="false"></textarea>
-            </div>
-            <div class="sp-field">
-              <label class="sp-field-label be">Backend</label>
-              <textarea id="sp-backend" class="sp-textarea" placeholder="Prompt for the Backend Claude..." rows="2" spellcheck="false"></textarea>
-            </div>
+            <div id="session-prompts-container"></div>
           </div>
         </div>
       </section>
@@ -84,26 +71,8 @@
       <!-- Project view (replaces terminals when active) -->
       <section class="project-view" id="project-view" style="display:none"></section>
 
-      <!-- Terminal panes -->
-      <section class="terminals-section">
-        <div class="terminal-pane" id="pane-frontend">
-          <div class="terminal-header">
-            <span class="terminal-label" data-role="frontend">Frontend</span>
-            <span class="terminal-cwd" id="cwd-frontend"></span>
-            <span class="terminal-status" id="status-frontend">idle</span>
-          </div>
-          <div class="terminal-body" id="term-frontend"></div>
-        </div>
-        <div class="pane-divider"></div>
-        <div class="terminal-pane" id="pane-backend">
-          <div class="terminal-header">
-            <span class="terminal-label" data-role="backend">Backend</span>
-            <span class="terminal-cwd" id="cwd-backend"></span>
-            <span class="terminal-status" id="status-backend">idle</span>
-          </div>
-          <div class="terminal-body" id="term-backend"></div>
-        </div>
-      </section>
+      <!-- Terminal panes (built dynamically) -->
+      <section class="terminals-section panes-2" id="terminals-section"></section>
 
     </div>
 

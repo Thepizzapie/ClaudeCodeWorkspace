@@ -1,6 +1,7 @@
 'use strict';
 
-const PANES = ['frontend', 'backend'];
+const PANE_COLORS = ['#5b8def', '#7c5bef', '#27ae60', '#d4a017'];
+
 const terms = {};
 const fitAddons = {};
 let ws = null;
@@ -20,11 +21,37 @@ const TERM_THEME = {
   white: '#d8d8d8', brightWhite: '#ffffff',
 };
 
-// ─── Terminals ────────────────────────────────────────────────────────────────
+// ─── Pane Management ──────────────────────────────────────────────────────────
 
-function setupTerminals() {
-  PANES.forEach(id => {
-    const container = document.getElementById(`term-${id}`);
+function rebuildPanes(panes) {
+  Object.keys(terms).forEach(id => {
+    try { terms[id].dispose(); } catch (_) {}
+    delete terms[id];
+    delete fitAddons[id];
+  });
+
+  const container = document.getElementById('terminals-container');
+  container.innerHTML = '';
+  container.className = `terminals panes-${panes.length}`;
+
+  panes.forEach(({ id, name, colorIndex }) => {
+    const color = PANE_COLORS[(colorIndex ?? 0) % PANE_COLORS.length];
+    const pane = document.createElement('div');
+    pane.className = 'pane';
+    pane.id = `pane-${id}`;
+    pane.innerHTML = `
+      <div class="pane-header">
+        <span class="pane-label" style="color:${color}">${esc(name)}</span>
+        <span class="pane-status" id="status-${id}">idle</span>
+      </div>
+      <div class="term-wrap" id="term-${id}"></div>
+    `;
+    container.appendChild(pane);
+  });
+
+  panes.forEach(({ id }) => {
+    const wrap = document.getElementById(`term-${id}`);
+    if (!wrap) return;
     const term = new Terminal({
       theme: TERM_THEME,
       fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
@@ -33,16 +60,20 @@ function setupTerminals() {
     });
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
-    term.open(container);
-    fitAddon.fit();
+    term.open(wrap);
+    try { fitAddon.fit(); } catch (_) {}
     term.onData(data => send({ type: 'input', id, data }));
     terms[id] = term;
     fitAddons[id] = fitAddon;
     new ResizeObserver(() => {
-      fitAddon.fit();
+      try { fitAddon.fit(); } catch (_) {}
       send({ type: 'resize', id, cols: term.cols, rows: term.rows });
-    }).observe(container);
+    }).observe(wrap);
   });
+}
+
+function refitAll() {
+  Object.values(fitAddons).forEach(fa => { try { fa.fit(); } catch (_) {} });
 }
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
@@ -66,9 +97,10 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
-function handleMessage({ type, id, data, exitCode, entries, projectId }) {
+function handleMessage({ type, id, data, panes, entries, projectId }) {
   if (type === 'output' && terms[id]) terms[id].write(data);
-  if (type === 'exit' && id) setTermStatus(id, 'exited');
+  if (type === 'exit'   && id) setTermStatus(id, 'exited');
+  if (type === 'panes-config' && Array.isArray(panes)) rebuildPanes(panes);
   if (type === 'context:sync') {
     currentProjectId = projectId;
     renderContextEntries(entries || []);
@@ -86,21 +118,21 @@ function scheduleReconnect() {
 
 // ─── Context panel ────────────────────────────────────────────────────────────
 
-const elCtxPanel  = document.getElementById('ctx-panel');
-const elCtxToggle = document.getElementById('ctx-toggle');
-const elCtxClose  = document.getElementById('ctx-panel-close');
+const elCtxPanel   = document.getElementById('ctx-panel');
+const elCtxToggle  = document.getElementById('ctx-toggle');
+const elCtxClose   = document.getElementById('ctx-panel-close');
 const elCtxEntries = document.getElementById('ctx-entries');
 
 elCtxToggle.addEventListener('click', () => {
   const open = elCtxPanel.classList.toggle('open');
   elCtxToggle.classList.toggle('active', open);
-  if (open) PANES.forEach(id => fitAddons[id] && fitAddons[id].fit());
+  refitAll();
 });
 
 elCtxClose.addEventListener('click', () => {
   elCtxPanel.classList.remove('open');
   elCtxToggle.classList.remove('active');
-  PANES.forEach(id => fitAddons[id] && fitAddons[id].fit());
+  refitAll();
 });
 
 document.getElementById('web-ctx-save').addEventListener('click', () => {
@@ -128,7 +160,7 @@ function renderContextEntries(entries) {
         <span class="ctx-entry-title">${esc(entry.title)}</span>
         <button class="ctx-del-btn" data-id="${entry.id}">Delete</button>
       </div>
-      <div class="ctx-entry-body">${esc(entry.content)}</div>
+      <div class="ctx-entry-body">${esc(entry.content || '')}</div>
     `;
     div.querySelector('.ctx-entry-row').addEventListener('click', e => {
       if (e.target.classList.contains('ctx-del-btn')) return;
@@ -141,13 +173,13 @@ function renderContextEntries(entries) {
   });
 }
 
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+
 function esc(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
-// ─── UI helpers ───────────────────────────────────────────────────────────────
 
 function setStatus(text, cls) {
   const el = document.getElementById('conn-status');
@@ -160,39 +192,6 @@ function setTermStatus(id, status) {
   if (el) { el.textContent = status; el.className = 'pane-status ' + status; }
 }
 
-// ─── Draggable divider ────────────────────────────────────────────────────────
-
-function setupDivider() {
-  const divider = document.getElementById('divider');
-  const container = document.querySelector('.terminals');
-  let dragging = false, startX, startWidths;
-
-  divider.addEventListener('mousedown', e => {
-    dragging = true; startX = e.clientX;
-    const panes = container.querySelectorAll('.pane');
-    startWidths = Array.from(panes).map(p => p.getBoundingClientRect().width);
-    divider.classList.add('dragging');
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-  });
-  document.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    const dx = e.clientX - startX;
-    const total = startWidths[0] + startWidths[1];
-    const newLeft = Math.max(200, Math.min(total - 200, startWidths[0] + dx));
-    const panes = container.querySelectorAll('.pane');
-    panes[0].style.flex = 'none'; panes[0].style.width = newLeft + 'px'; panes[1].style.flex = '1';
-    PANES.forEach(id => fitAddons[id] && fitAddons[id].fit());
-  });
-  document.addEventListener('mouseup', () => {
-    if (!dragging) return;
-    dragging = false; divider.classList.remove('dragging');
-    document.body.style.userSelect = ''; document.body.style.cursor = '';
-  });
-}
-
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
-setupTerminals();
-setupDivider();
 connect();

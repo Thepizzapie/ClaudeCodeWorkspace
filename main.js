@@ -17,7 +17,7 @@ let mainWindow;
 const terminals = {};
 
 // ─── Terminal output buffers ──────────────────────────────────────────────────
-const termBuffers = { frontend: '', backend: '' };
+const termBuffers = {};
 const BUFFER_MAX = 150 * 1024;
 
 // ─── Web server state ─────────────────────────────────────────────────────────
@@ -25,6 +25,7 @@ let httpServer = null;
 let wss = null;
 const wsClients = new Set();
 let serverToken = null;
+let currentPanesConfig = null;
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
@@ -165,9 +166,10 @@ function startWebServer() {
     wsClients.add(ws);
     sendToRenderer('server:clients', wsClients.size);
 
-    // Replay terminal buffers
-    ['frontend', 'backend'].forEach(id => {
-      if (termBuffers[id]) ws.send(JSON.stringify({ type: 'output', id, data: termBuffers[id] }));
+    // Replay pane config then terminal buffers
+    if (currentPanesConfig) ws.send(JSON.stringify({ type: 'panes-config', panes: currentPanesConfig }));
+    Object.entries(termBuffers).forEach(([id, buf]) => {
+      if (buf) ws.send(JSON.stringify({ type: 'output', id, data: buf }));
     });
 
     ws.on('message', raw => {
@@ -235,6 +237,10 @@ function handleWebContextDelete(ws, { projectId, id }) {
 
 ipcMain.handle('server:start', () => { startWebServer(); return WS_PORT; });
 ipcMain.handle('server:stop',  () => { stopWebServer(); });
+ipcMain.handle('server:set-panes', (event, panes) => {
+  currentPanesConfig = panes;
+  broadcastWS({ type: 'panes-config', panes });
+});
 
 // ─── IPC: Dialogs ─────────────────────────────────────────────────────────────
 
